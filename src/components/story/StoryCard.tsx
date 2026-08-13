@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,9 +8,18 @@ import { Story } from '@/types/models';
 export interface StoryCardProps {
   story: Story;
   onPress?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  deleting?: boolean;
 }
 
-export function StoryCard({ story, onPress }: StoryCardProps) {
+export function StoryCard({
+  story,
+  onPress,
+  onEdit,
+  onDelete,
+  deleting = false,
+}: StoryCardProps) {
   const formattedDate = formatDate(story.createdAt);
 
   return (
@@ -45,6 +54,49 @@ export function StoryCard({ story, onPress }: StoryCardProps) {
               )}
             </View>
           </View>
+
+          {(onEdit || onDelete) && (
+            <View style={styles.actionRow}>
+              {Boolean(onEdit) && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    styles.editButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onEdit?.();
+                  }}
+                  disabled={deleting}
+                >
+                  <ThemedText style={styles.editButtonText}>Edit</ThemedText>
+                </Pressable>
+              )}
+
+              {Boolean(onDelete) && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    styles.deleteButton,
+                    deleting && styles.disabledButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onDelete?.();
+                  }}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
       </ThemedView>
     </Pressable>
@@ -106,5 +158,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(150, 150, 150, 0.15)',
+  },
+  actionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  editButtonText: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    minWidth: 64,
+  },
+  deleteButtonText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.7,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });

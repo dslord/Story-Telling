@@ -1,6 +1,8 @@
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,33 +11,42 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { StoryCard } from '@/components/story/StoryCard';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/services/auth/auth-provider';
+import { deleteStory, fetchUserStories } from '@/services/firebase/story-service';
 import {
   getCurrentUserProfile,
   getUserLikesReceived,
   getUserStoryCount,
 } from '@/services/firebase/user-service';
-import { UserProfile } from '@/types/models';
+import { Story, UserProfile } from '@/types/models';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const theme = useTheme();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [storyCount, setStoryCount] = useState<number>(0);
   const [likesReceived, setLikesReceived] = useState<number>(0);
+  const [userStories, setUserStories] = useState<Story[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
+  const [storiesLoading, setStoriesLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [storiesError, setStoriesError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState<boolean>(false);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadProfileData = useCallback(async (isRefresh = false) => {
     if (!user) {
       setLoading(false);
+      setStoriesLoading(false);
       setRefreshing(false);
       return;
     }
@@ -44,14 +55,21 @@ export default function ProfileScreen() {
       setRefreshing(true);
     } else {
       setLoading(true);
+      setStoriesLoading(true);
     }
     setError(null);
+    setStoriesError(null);
 
     try {
-      const [fetchedProfile, count, likes] = await Promise.all([
+      const [fetchedProfile, count, likes, storiesResult] = await Promise.all([
         getCurrentUserProfile(),
         getUserStoryCount(user.uid),
         getUserLikesReceived(user.uid),
+        fetchUserStories(user.uid).catch((err) => {
+          console.error('Error fetching user stories:', err);
+          setStoriesError('Failed to load your stories. Please pull down to retry.');
+          return null;
+        }),
       ]);
 
       if (fetchedProfile) {
@@ -75,11 +93,15 @@ export default function ProfileScreen() {
 
       setStoryCount(count);
       setLikesReceived(likes);
+      if (storiesResult !== null) {
+        setUserStories(storiesResult);
+      }
     } catch (err: any) {
       console.error('Error loading profile data:', err);
       setError('Failed to load profile data. Please pull down to retry.');
     } finally {
       setLoading(false);
+      setStoriesLoading(false);
       setRefreshing(false);
     }
   }, [user]);
@@ -98,6 +120,38 @@ export default function ProfileScreen() {
       setError(err?.message || 'Failed to sign out. Please try again.');
       setSigningOut(false);
     }
+  };
+
+  const handleDeleteStory = (storyId: string, storyTitle: string, storyLikes: number) => {
+    if (deletingId) return;
+
+    Alert.alert(
+      'Delete Story',
+      `Are you sure you want to delete "${storyTitle}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (deletingId) return;
+            setDeletingId(storyId);
+            try {
+              await deleteStory(storyId);
+              setUserStories((prev) => prev.filter((s) => s.id !== storyId));
+              setStoryCount((prev) => Math.max(0, prev - 1));
+              setLikesReceived((prev) => Math.max(0, prev - (storyLikes || 0)));
+              Alert.alert('Success', 'Story deleted successfully.');
+            } catch (err: any) {
+              console.error('Failed to delete story:', err);
+              Alert.alert('Error', err?.message || 'Failed to delete story. Please try again.');
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = (): string => {
@@ -184,6 +238,58 @@ export default function ProfileScreen() {
                     Likes Received
                   </ThemedText>
                 </ThemedView>
+              </View>
+
+              {/* My Stories Section */}
+              <View style={styles.myStoriesSection}>
+                <View style={styles.sectionHeader}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    My Stories
+                  </ThemedText>
+                </View>
+
+                {storiesLoading && !refreshing ? (
+                  <View style={styles.storiesLoadingContainer}>
+                    <ActivityIndicator size="small" color={theme.text} />
+                    <ThemedText themeColor="textSecondary" style={styles.storiesLoadingText}>
+                      Loading your stories...
+                    </ThemedText>
+                  </View>
+                ) : storiesError ? (
+                  <View style={styles.storiesErrorBox}>
+                    <ThemedText style={styles.storiesErrorText}>{storiesError}</ThemedText>
+                  </View>
+                ) : userStories.length === 0 ? (
+                  <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+                    <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                      You haven't published any stories yet.
+                    </ThemedText>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => router.push('/create')}
+                    >
+                      <ThemedText style={styles.createButtonText}>
+                        Create a Story
+                      </ThemedText>
+                    </Pressable>
+                  </ThemedView>
+                ) : (
+                  <View style={styles.storiesList}>
+                    {userStories.map((story) => (
+                      <StoryCard
+                        key={story.id}
+                        story={story}
+                        onPress={() => router.push(`/story/${story.id}`)}
+                        onEdit={() => router.push(`/story/edit/${story.id}`)}
+                        onDelete={() => handleDeleteStory(story.id, story.title, story.likesCount)}
+                        deleting={deletingId === story.id}
+                      />
+                    ))}
+                  </View>
+                )}
               </View>
 
               {/* Sign Out Button */}
@@ -311,6 +417,71 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 13,
     textAlign: 'center',
+  },
+  myStoriesSection: {
+    width: '100%',
+    marginTop: 8,
+    gap: 12,
+  },
+  sectionHeader: {
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  storiesLoadingContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  storiesLoadingText: {
+    fontSize: 14,
+  },
+  storiesErrorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: '#ef4444',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 14,
+  },
+  storiesErrorText: {
+    color: '#ef4444',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    padding: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(150, 150, 150, 0.15)',
+  },
+  emptyText: {
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  createButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  createButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  storiesList: {
+    width: '100%',
   },
   signOutContainer: {
     width: '100%',

@@ -1,10 +1,26 @@
-import { addDoc, getDoc, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import {
+  addDoc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  where,
+} from 'firebase/firestore';
 
-import { auth } from '@/config/firebase';
-import { collections, docRefs } from './collections';
+import { auth, db } from '@/config/firebase';
+import { collections, docRefs, storyLikesCollection } from './collections';
 import { Story } from '@/types/models';
 
 export interface CreateStoryInput {
+  title: string;
+  description: string;
+  story: string;
+  moral: string;
+}
+
+export interface UpdateStoryInput {
   title: string;
   description: string;
   story: string;
@@ -111,4 +127,149 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
 
   return docRef.id;
 }
+
+/**
+ * Fetches all stories authored by a specific user (uid) ordered by creation date descending.
+ * @param uid The Firebase Auth UID of the story author.
+ * @returns Array of Story objects belonging to the user, newest first.
+ */
+export async function fetchUserStories(uid: string): Promise<Story[]> {
+  if (!uid || !uid.trim()) {
+    return [];
+  }
+
+  const q = query(
+    collections.stories,
+    where('authorUid', '==', uid),
+    orderBy('createdAt', 'desc')
+  );
+
+  const querySnapshot = await getDocs(q);
+
+  const stories: Story[] = [];
+  querySnapshot.forEach((doc) => {
+    stories.push({
+      ...doc.data(),
+      id: doc.id,
+    });
+  });
+
+  return stories;
+}
+
+/**
+ * Updates an existing story document in Firestore.
+ * Verifies that the authenticated user is the original author before making updates.
+ * Only editable fields (title, description, story, moral) can be updated.
+ */
+export async function updateStory(storyId: string, input: UpdateStoryInput): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('User must be authenticated to update a story.');
+  }
+
+  if (!storyId || !storyId.trim()) {
+    throw new Error('Story ID is required.');
+  }
+
+  if (!input) {
+    throw new Error('Story update input is required.');
+  }
+
+  const title = input.title?.trim() || '';
+  const description = input.description?.trim() || '';
+  const storyText = input.story?.trim() || '';
+  const moral = input.moral?.trim() || '';
+
+  if (!title) {
+    throw new Error('Story title cannot be empty.');
+  }
+  if (!description) {
+    throw new Error('Story description cannot be empty.');
+  }
+  if (!storyText) {
+    throw new Error('Story content cannot be empty.');
+  }
+  if (!moral) {
+    throw new Error('Story moral cannot be empty.');
+  }
+
+  if (title.length > 200) {
+    throw new Error('Story title exceeds maximum limit of 200 characters.');
+  }
+  if (description.length > 1000) {
+    throw new Error('Story description exceeds maximum limit of 1000 characters.');
+  }
+  if (storyText.length > 50000) {
+    throw new Error('Story content exceeds maximum limit of 50000 characters.');
+  }
+  if (moral.length > 500) {
+    throw new Error('Story moral exceeds maximum limit of 500 characters.');
+  }
+
+  const storyRef = docRefs.story(storyId);
+
+  await runTransaction(db, async (transaction) => {
+    const storyDoc = await transaction.get(storyRef);
+    if (!storyDoc.exists()) {
+      throw new Error('Story does not exist.');
+    }
+
+    const storyData = storyDoc.data();
+    if (storyData.authorUid !== currentUser.uid) {
+      throw new Error('Unauthorized: You can only update your own stories.');
+    }
+
+    transaction.update(storyRef, {
+      title,
+      description,
+      story: storyText,
+      moral,
+    });
+  });
+}
+
+/**
+ * Deletes a story document and its likes subcollection from Firestore.
+ * Verifies that the authenticated user is the original author before deletion.
+ */
+export async function deleteStory(storyId: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('User must be authenticated to delete a story.');
+  }
+
+  if (!storyId || !storyId.trim()) {
+    throw new Error('Story ID is required.');
+  }
+
+  const storyRef = docRefs.story(storyId);
+  const likesRef = storyLikesCollection(storyId);
+
+  // Fetch likes subcollection documents to clean up orphaned likes
+  const likesSnapshot = await getDocs(likesRef);
+
+  await runTransaction(db, async (transaction) => {
+    const storyDoc = await transaction.get(storyRef);
+    if (!storyDoc.exists()) {
+      throw new Error('Story does not exist.');
+    }
+
+    const storyData = storyDoc.data();
+    if (storyData.authorUid !== currentUser.uid) {
+      throw new Error('Unauthorized: You can only delete your own stories.');
+    }
+
+    // Delete all like documents in subcollection to prevent orphaned documents
+    likesSnapshot.forEach((likeDoc) => {
+      transaction.delete(likeDoc.ref);
+    });
+
+    // Delete main story document
+    transaction.delete(storyRef);
+  });
+}
+
+
+
 
