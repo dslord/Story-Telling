@@ -25,16 +25,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          await syncUserProfile(firebaseUser);
-        } catch (error) {
-          console.error('Failed to sync user profile:', error);
-        }
-      }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
+
+      if (firebaseUser) {
+        syncUserProfile(firebaseUser).catch((error) => {
+          console.error('Failed to sync user profile:', error);
+        });
+      }
     });
 
     return unsubscribe;

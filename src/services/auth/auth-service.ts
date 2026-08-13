@@ -22,30 +22,43 @@ export function configureGoogleSignIn(): void {
 
 export async function syncUserProfile(user: User): Promise<void> {
   const userRef = docRefs.user(user.uid);
-  const existingDoc = await getDoc(userRef);
+
+  let existingDocData: any = null;
+  try {
+    const existingDoc = await getDoc(userRef);
+    if (existingDoc.exists()) {
+      existingDocData = existingDoc.data();
+    }
+  } catch (error) {
+    console.warn('Could not read existing user profile (client offline or initial connection pending):', error);
+  }
 
   const displayNameParts = (user.displayName || '').trim().split(' ');
   const firstName = displayNameParts[0] || '';
   const lastName = displayNameParts.slice(1).join(' ') || '';
 
-  if (!existingDoc.exists()) {
-    await setDoc(userRef, {
-      uid: user.uid,
-      email: user.email || '',
-      firstName,
-      lastName,
-      profilePicture: user.photoURL || null,
-      themePreference: 'dark',
-      createdAt: serverTimestamp() as any,
-    });
+  if (!existingDocData) {
+    await setDoc(
+      userRef,
+      {
+        uid: user.uid,
+        email: user.email || '',
+        firstName,
+        lastName,
+        profilePicture: user.photoURL || null,
+        themePreference: 'dark',
+        createdAt: serverTimestamp() as any,
+      },
+      { merge: true }
+    );
   } else {
     await setDoc(
       userRef,
       {
         email: user.email || '',
-        firstName: firstName || existingDoc.data()?.firstName || '',
-        lastName: lastName || existingDoc.data()?.lastName || '',
-        profilePicture: user.photoURL || existingDoc.data()?.profilePicture || null,
+        firstName: firstName || existingDocData?.firstName || '',
+        lastName: lastName || existingDocData?.lastName || '',
+        profilePicture: user.photoURL || existingDocData?.profilePicture || null,
       },
       { merge: true }
     );
@@ -67,7 +80,11 @@ export async function signInWithGoogle(): Promise<User | null> {
     const result = await signInWithCredential(auth, credential);
 
     if (result.user) {
-      await syncUserProfile(result.user);
+      try {
+        await syncUserProfile(result.user);
+      } catch (error) {
+        console.error('Non-critical user profile sync error:', error);
+      }
     }
 
     return result.user;
