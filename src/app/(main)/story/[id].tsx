@@ -13,10 +13,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/services/auth/auth-provider';
+import {
+  hasUserLikedStory,
+  likeStory,
+  unlikeStory,
+} from '@/services/firebase/like-service';
 import { fetchStoryById } from '@/services/firebase/story-service';
 import { Story } from '@/types/models';
 
 export default function FullStoryScreen() {
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
@@ -25,6 +32,12 @@ export default function FullStoryScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<boolean>(false);
+
+  const [isLiked, setIsLiked] = useState<boolean>(false);
+  const [likesCount, setLikesCount] = useState<number>(0);
+  const [likeChecking, setLikeChecking] = useState<boolean>(true);
+  const [likeActionPending, setLikeActionPending] = useState<boolean>(false);
+  const [likeError, setLikeError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -41,6 +54,7 @@ export default function FullStoryScreen() {
         const data = await fetchStoryById(id);
         if (isMounted) {
           setStory(data);
+          setLikesCount(data?.likesCount ?? 0);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -59,6 +73,68 @@ export default function FullStoryScreen() {
       isMounted = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkLikeStatus() {
+      if (!id || !user?.uid) {
+        setLikeChecking(false);
+        setIsLiked(false);
+        return;
+      }
+
+      try {
+        setLikeChecking(true);
+        setLikeError(null);
+        const liked = await hasUserLikedStory(id, user.uid);
+        if (isMounted) {
+          setIsLiked(liked);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Error checking like status:', err);
+          setLikeError('Could not verify like status.');
+        }
+      } finally {
+        if (isMounted) {
+          setLikeChecking(false);
+        }
+      }
+    }
+
+    checkLikeStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, user?.uid]);
+
+  const handleToggleLike = async () => {
+    if (!id || !user?.uid || likeActionPending || likeChecking) return;
+
+    setLikeActionPending(true);
+    setLikeError(null);
+
+    const currentlyLiked = isLiked;
+
+    try {
+      if (currentlyLiked) {
+        await unlikeStory(id, user.uid);
+        setIsLiked(false);
+        setLikesCount((prev) => Math.max(0, prev - 1));
+      } else {
+        await likeStory(id, user.uid);
+        setIsLiked(true);
+        setLikesCount((prev) => prev + 1);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle like:', err);
+      setLikeError(err?.message || 'Failed to update like state. Please try again.');
+    } finally {
+      setLikeActionPending(false);
+    }
+  };
 
   const hasValidImage = Boolean(story?.previewImage && story.previewImage.trim() !== '' && !imageError);
   const formattedDate = formatDate(story?.createdAt);
@@ -116,7 +192,7 @@ export default function FullStoryScreen() {
                 </ThemedText>
                 <View style={styles.metaRow}>
                   <ThemedText type="small" themeColor="textSecondary">
-                    ❤️ {story.likesCount ?? 0}
+                    ❤️ {likesCount}
                   </ThemedText>
                   {Boolean(formattedDate) && (
                     <ThemedText type="small" themeColor="textSecondary">
@@ -124,6 +200,34 @@ export default function FullStoryScreen() {
                     </ThemedText>
                   )}
                 </View>
+              </View>
+
+              <View style={styles.likeSection}>
+                <Pressable
+                  style={[
+                    styles.likeButton,
+                    isLiked ? styles.likedButton : styles.unlikedButton,
+                    (likeActionPending || likeChecking || !user) && styles.disabledLikeButton,
+                  ]}
+                  onPress={handleToggleLike}
+                  disabled={likeActionPending || likeChecking || !user}
+                >
+                  {likeChecking || likeActionPending ? (
+                    <ActivityIndicator size="small" color={isLiked ? '#ef4444' : theme.text} />
+                  ) : (
+                    <ThemedText
+                      style={[
+                        styles.likeButtonText,
+                        isLiked ? styles.likedButtonText : styles.unlikedButtonText,
+                      ]}
+                    >
+                      {isLiked ? '❤️ Liked' : '🤍 Like'}
+                    </ThemedText>
+                  )}
+                </Pressable>
+                {likeError && (
+                  <ThemedText style={styles.likeErrorText}>{likeError}</ThemedText>
+                )}
               </View>
 
               {Boolean(story.description) && (
@@ -229,6 +333,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  likeSection: {
+    marginVertical: 4,
+    alignItems: 'flex-start',
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    minWidth: 110,
+    height: 40,
+  },
+  likedButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: '#ef4444',
+  },
+  unlikedButton: {
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    borderColor: 'rgba(150, 150, 150, 0.3)',
+  },
+  disabledLikeButton: {
+    opacity: 0.6,
+  },
+  likeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  likedButtonText: {
+    color: '#ef4444',
+  },
+  unlikedButtonText: {},
+  likeErrorText: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#ef4444',
+  },
   descriptionBox: {
     padding: 14,
     borderRadius: 8,
@@ -259,3 +402,4 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
+
