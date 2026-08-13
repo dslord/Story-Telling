@@ -26,6 +26,12 @@ export default function TabsLayout() {
           title: 'Create Story',
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+        }}
+      />
     </Tabs>
   );
 }
