@@ -9,7 +9,6 @@ export interface CreateStoryInput {
   description: string;
   story: string;
   moral: string;
-  previewImage?: string;
 }
 
 /**
@@ -64,7 +63,6 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
   const description = input.description?.trim() || '';
   const storyText = input.story?.trim() || '';
   const moral = input.moral?.trim() || '';
-  const previewImage = input.previewImage?.trim() || '';
 
   // Required non-empty field validations
   if (!title) {
@@ -105,7 +103,6 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
     description,
     story: storyText,
     moral,
-    previewImage,
     authorUid,
     authorName,
     likesCount: 0,

@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import React from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useTheme } from '@/hooks/use-theme';
 import { Story } from '@/types/models';
 
 export interface StoryCardProps {
@@ -12,30 +11,11 @@ export interface StoryCardProps {
 }
 
 export function StoryCard({ story, onPress }: StoryCardProps) {
-  const theme = useTheme();
-  const [imageError, setImageError] = useState(false);
-
-  const hasValidImage = Boolean(story.previewImage && story.previewImage.trim() !== '' && !imageError);
   const formattedDate = formatDate(story.createdAt);
 
   return (
     <Pressable onPress={onPress} disabled={!onPress}>
       <ThemedView type="backgroundElement" style={styles.card}>
-        {hasValidImage ? (
-          <Image
-            source={{ uri: story.previewImage }}
-            style={styles.image}
-            onError={() => setImageError(true)}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.placeholderImage, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText themeColor="textSecondary" style={styles.placeholderText}>
-              📖 No Preview Image
-            </ThemedText>
-          </View>
-        )}
-
         <View style={styles.content}>
           <ThemedText style={styles.title} numberOfLines={2}>
             {story.title}
@@ -95,19 +75,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
-  },
-  image: {
-    width: '100%',
-    height: 180,
-  },
-  placeholderImage: {
-    width: '100%',
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 14,
   },
   content: {
     padding: 16,

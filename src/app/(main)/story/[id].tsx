@@ -2,7 +2,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,7 +30,6 @@ export default function FullStoryScreen() {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<boolean>(false);
 
   const [isLiked, setIsLiked] = useState<boolean>(false);
   const [likesCount, setLikesCount] = useState<number>(0);
@@ -136,7 +134,6 @@ export default function FullStoryScreen() {
     }
   };
 
-  const hasValidImage = Boolean(story?.previewImage && story.previewImage.trim() !== '' && !imageError);
   const formattedDate = formatDate(story?.createdAt);
 
   return (
@@ -172,15 +169,6 @@ export default function FullStoryScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            {hasValidImage && (
-              <Image
-                source={{ uri: story.previewImage }}
-                style={styles.image}
-                onError={() => setImageError(true)}
-                resizeMode="cover"
-              />
-            )}
-
             <View style={styles.bodyContent}>
               <ThemedText type="subtitle" style={styles.title}>
                 {story.title}
@@ -306,10 +294,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 32,
-  },
-  image: {
-    width: '100%',
-    height: 240,
   },
   bodyContent: {
     padding: 20,

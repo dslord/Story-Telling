@@ -78,7 +78,6 @@ export default function CreateStoryScreen() {
         description,
         story: storyContent,
         moral,
-        previewImage: '',
       });
 
       setTitle('');
@@ -276,22 +275,6 @@ export default function CreateStoryScreen() {
               )}
             </View>
 
-            {/* Preview Image Placeholder Area */}
-            <View style={styles.fieldGroup}>
-              <ThemedText type="smallBold">Preview Image</ThemedText>
-              <View
-                style={[
-                  styles.imagePlaceholder,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText style={styles.placeholderIcon}>🖼️</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Image Upload (Coming Soon)
-                </ThemedText>
-              </View>
-            </View>
-
             {/* Publish Button */}
             <Pressable
               style={[
@@ -384,19 +367,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  imagePlaceholder: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(150, 150, 150, 0.25)',
-    borderStyle: 'dashed',
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  placeholderIcon: {
-    fontSize: 24,
-  },
   publishButton: {
     backgroundColor: '#3b82f6',
     borderRadius: 12,
@@ -419,4 +389,3 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
-

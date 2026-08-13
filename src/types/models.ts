@@ -16,7 +16,6 @@ export interface Story {
   description: string;
   story: string;
   moral: string;
-  previewImage: string;
   authorUid: string;
   authorName: string;
   likesCount: number;
