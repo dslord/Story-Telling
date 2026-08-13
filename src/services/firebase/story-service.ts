@@ -1,11 +1,14 @@
 import {
   addDoc,
+  endAt,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   runTransaction,
   serverTimestamp,
+  startAt,
   where,
 } from 'firebase/firestore';
 
@@ -158,6 +161,40 @@ export async function fetchUserStories(uid: string): Promise<Story[]> {
 }
 
 /**
+ * Searches published stories by title prefix using Firestore startAt/endAt.
+ * Results are ordered alphabetically by title and capped at 30 items.
+ * @param searchTerm The search term to query against story titles.
+ * @returns Array of matching Story objects.
+ */
+export async function searchStories(searchTerm: string): Promise<Story[]> {
+  if (!searchTerm || !searchTerm.trim()) {
+    return [];
+  }
+
+  const trimmedTerm = searchTerm.trim();
+
+  const q = query(
+    collections.stories,
+    orderBy('title'),
+    startAt(trimmedTerm),
+    endAt(trimmedTerm + '\uf8ff'),
+    limit(30)
+  );
+
+  const querySnapshot = await getDocs(q);
+
+  const stories: Story[] = [];
+  querySnapshot.forEach((doc) => {
+    stories.push({
+      ...doc.data(),
+      id: doc.id,
+    });
+  });
+
+  return stories;
+}
+
+/**
  * Updates an existing story document in Firestore.
  * Verifies that the authenticated user is the original author before making updates.
  * Only editable fields (title, description, story, moral) can be updated.
@@ -269,6 +306,7 @@ export async function deleteStory(storyId: string): Promise<void> {
     transaction.delete(storyRef);
   });
 }
+
 
 
 

@@ -21,6 +21,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Discover',
+        }}
+      />
+      <Tabs.Screen
         name="create"
         options={{
           title: 'Create Story',
