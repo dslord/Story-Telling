@@ -297,6 +297,8 @@ export async function deleteStory(storyId: string): Promise<void> {
       throw new Error('Unauthorized: You can only delete your own stories.');
     }
 
+    const storyLikes = storyData.likesCount || 0;
+
     // Delete all like documents in subcollection to prevent orphaned documents
     likesSnapshot.forEach((likeDoc) => {
       transaction.delete(likeDoc.ref);
@@ -304,6 +306,17 @@ export async function deleteStory(storyId: string): Promise<void> {
 
     // Delete main story document
     transaction.delete(storyRef);
+
+    // If story had likes, decrement the author's totalLikesReceived by storyLikes
+    if (storyLikes > 0) {
+      const authorRef = docRefs.user(currentUser.uid);
+      const authorDoc = await transaction.get(authorRef);
+      const currentTotalLikes = authorDoc.exists() ? (authorDoc.data().totalLikesReceived || 0) : 0;
+      const newTotalLikes = Math.max(0, currentTotalLikes - storyLikes);
+      transaction.set(authorRef, {
+        totalLikesReceived: newTotalLikes,
+      }, { merge: true });
+    }
   });
 }
 
