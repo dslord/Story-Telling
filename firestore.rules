@@ -185,5 +185,32 @@ service cloud.firestore {
         )
       );
     }
+
+    // 4. STORY COMMENTS
+    match /stories/{storyId}/comments/{commentId} {
+      // Authenticated users can read comments
+      allow read: if request.auth != null;
+
+      // Authenticated users can create comments
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.storyId == storyId
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.keys().hasOnly(['storyId', 'authorUid', 'authorName', 'text', 'createdAt']);
+
+      // Comment author or parent story owner can delete
+      allow delete: if request.auth != null && (
+        resource.data.authorUid == request.auth.uid
+        || get(/databases/$(database)/documents/stories/$(storyId)).data.authorUid == request.auth.uid
+      );
+
+      // Comments cannot be updated
+      allow update: if false;
+    }
   }
 }

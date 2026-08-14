@@ -461,4 +461,142 @@ describe('Firestore Security Rules', () => {
       await assertFails(setDoc(likeRef, { likedAt: serverTimestamp() }));
     });
   });
+
+  // --- 5. STORY COMMENTS SECURITY TESTS ---
+  describe('Story Comments', () => {
+    test('PASS: Authenticated user can create a valid comment', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userA',
+        authorName: 'User A',
+        text: 'This is a valid comment!',
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Unauthenticated user cannot create a comment', async () => {
+      const db = getUnauthenticatedFirestore();
+      await assertFails(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userA',
+        authorName: 'User A',
+        text: 'This is a comment.',
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: User cannot create a comment with another user\'s authorUid', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userB', // Impersonating userB
+        authorName: 'User B',
+        text: 'This is a comment.',
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Empty comment is rejected', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userA',
+        authorName: 'User A',
+        text: '', // Empty
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Comment longer than 1000 characters is rejected', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      const longText = 'a'.repeat(1001);
+      await assertFails(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userA',
+        authorName: 'User A',
+        text: longText,
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('PASS: Authenticated user can read comments', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(getDoc(doc(db, 'stories/storyA/comments/comment1')));
+    });
+
+    test('FAIL: Unauthenticated user cannot read comments', async () => {
+      const db = getUnauthenticatedFirestore();
+      await assertFails(getDoc(doc(db, 'stories/storyA/comments/comment1')));
+    });
+
+    test('PASS: Comment author can delete their comment', async () => {
+      // Setup: Create a comment with security rules disabled
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+          storyId: 'storyA',
+          authorUid: 'userA',
+          authorName: 'User A',
+          text: 'Comment',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(deleteDoc(doc(db, 'stories/storyA/comments/comment1')));
+    });
+
+    test('PASS: Story owner can delete comments on their story', async () => {
+      // Setup: Story created by userA, comment created by userB
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'stories/storyA'), {
+          authorUid: 'userA',
+        });
+        await setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+          storyId: 'storyA',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Comment',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' }); // Story owner
+      await assertSucceeds(deleteDoc(doc(db, 'stories/storyA/comments/comment1')));
+    });
+
+    test('FAIL: Unrelated user cannot delete comments', async () => {
+      // Setup: Story created by userA, comment created by userB
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'stories/storyA'), {
+          authorUid: 'userA',
+        });
+        await setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+          storyId: 'storyA',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Comment',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userC' }); // Unrelated user
+      await assertFails(deleteDoc(doc(db, 'stories/storyA/comments/comment1')));
+    });
+
+    test('FAIL: Invalid/extra fields in comment document are rejected', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
+        storyId: 'storyA',
+        authorUid: 'userA',
+        authorName: 'User A',
+        text: 'Valid text',
+        createdAt: serverTimestamp(),
+        extraField: 'not allowed', // Extra field!
+      }));
+    });
+  });
 });

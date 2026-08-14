@@ -26,3 +26,12 @@ export interface Story {
 export interface StoryLike {
   likedAt: Timestamp;
 }
+
+export interface StoryComment {
+  id: string;
+  storyId: string;
+  authorUid: string;
+  authorName: string;
+  text: string;
+  createdAt: Timestamp;
+}
