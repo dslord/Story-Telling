@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StoryCard } from '@/components/story/StoryCard';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useTheme } from '@/hooks/use-theme';
 import { fetchStories } from '@/services/firebase/story-service';
 import { Story } from '@/types/models';
 
 export default function FeedScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -56,7 +58,7 @@ export default function FeedScreen() {
 
         {loading && !refreshing ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" />
+            <ActivityIndicator size="large" color={theme.text} />
             <ThemedText themeColor="textSecondary" style={styles.stateText}>
               Loading stories...
             </ThemedText>

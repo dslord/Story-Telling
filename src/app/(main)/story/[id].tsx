@@ -148,7 +148,7 @@ export default function FullStoryScreen() {
       <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" />
+            <ActivityIndicator size="large" color={theme.text} />
             <ThemedText themeColor="textSecondary" style={styles.stateText}>
               Loading story...
             </ThemedText>

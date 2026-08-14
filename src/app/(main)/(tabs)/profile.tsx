@@ -15,6 +15,7 @@ import { StoryCard } from '@/components/story/StoryCard';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { useThemeContext } from '@/context/theme-context';
 import { useAuth } from '@/services/auth/auth-provider';
 import { deleteStory, fetchUserStories } from '@/services/firebase/story-service';
 import {
@@ -28,6 +29,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const theme = useTheme();
+  const { themeMode, setThemeMode } = useThemeContext();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [storyCount, setStoryCount] = useState<number>(0);
@@ -292,6 +294,43 @@ export default function ProfileScreen() {
                 )}
               </View>
 
+              {/* Theme Section */}
+              <View style={styles.themeSection}>
+                <View style={styles.sectionHeader}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    App Theme
+                  </ThemedText>
+                </View>
+                <View style={styles.themeSelector}>
+                  {(['light', 'dark', 'system'] as const).map((mode) => {
+                    const isSelected = themeMode === mode;
+                    return (
+                      <Pressable
+                        key={mode}
+                        style={({ pressed }) => [
+                          styles.themeOptionButton,
+                          {
+                            borderColor: theme.border,
+                            backgroundColor: isSelected ? theme.backgroundSelected : 'transparent',
+                          },
+                          pressed && styles.buttonPressed,
+                        ]}
+                        onPress={() => setThemeMode(mode)}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.themeOptionText,
+                            isSelected && styles.themeOptionTextActive,
+                          ]}
+                        >
+                          {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
               {/* Sign Out Button */}
               <View style={styles.signOutContainer}>
                 <Pressable
@@ -508,5 +547,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  themeSection: {
+    width: '100%',
+    marginTop: 8,
+    gap: 12,
+  },
+  themeSelector: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  themeOptionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  themeOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  themeOptionTextActive: {
+    color: '#3b82f6',
   },
 });
