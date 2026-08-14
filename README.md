@@ -1,56 +1,148 @@
-# Welcome to your Expo app 👋
+# StoryTelling
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+StoryTelling is a mobile storytelling platform built using **React Native**, **Expo**, and **Firebase**. The application allows users to create, publish, discover, like, edit, delete, and comment on stories while providing user profiles, story search, and persistent theme preferences.
 
-## Get started
+This project was developed to explore mobile app development concepts such as Firebase authentication, Firestore database operations, secure backend rules, transactional updates, user profiles, comments, search, and theme management.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Features
 
-2. Start the app
+* Create and publish stories
+* Browse and discover stories
+* Search for stories
+* Edit and delete your own stories
+* Like and unlike stories
+* Add and delete comments
+* User profile and story management
+* Light, Dark, and System theme modes
+* Persistent theme preferences
+* Firebase Authentication
+* Firestore database integration
+* Server-side Firestore security rules
+* Automated Firestore security rule testing
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## Technologies Used
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+* React Native
+* Expo
+* TypeScript
+* Expo Router
+* Firebase Authentication
+* Cloud Firestore
+* Firebase Security Rules
+* AsyncStorage
+* Jest
+* Firebase Emulator
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## Getting Started
 
-When you're ready, run:
+### Clone the Repository
 
-```bash
-npm run reset-project
-```
+    git clone https://github.com/dslord/StoryTelling.git
+    cd StoryTelling
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Install Dependencies
 
-### Other setup steps
+    npm install
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Configure Firebase
 
-## Learn more
+Add your Firebase configuration locally. Sensitive Firebase configuration files are intentionally excluded from the repository.
 
-To learn more about developing your project with Expo, look at the following resources:
+### Run the Project
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+    npx expo start
 
-## Join the community
+For Android:
 
-Join our community of developers creating universal apps.
+    npx expo run:android
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## Project Structure
+
+    ├── src/
+    │   ├── app/
+    │   ├── components/
+    │   ├── config/
+    │   ├── constants/
+    │   ├── context/
+    │   ├── hooks/
+    │   ├── services/
+    │   └── types/
+    │
+    ├── assets/
+    ├── android/
+    ├── scripts/
+    │   └── firestore.rules.test.js
+    │
+    ├── app.json
+    ├── package.json
+    ├── package-lock.json
+    ├── tsconfig.json
+    ├── expo-env.d.ts
+    ├── firebase.json
+    ├── firestore.rules
+    ├── .gitignore
+    ├── LICENSE
+    └── README.md
+
+---
+
+## Firebase Security
+
+Firestore Security Rules protect:
+
+* User profiles
+* Story ownership
+* Story creation and editing
+* Story deletion
+* Like transactions
+* Comments
+* Field validation
+* Character limits
+
+Like and unlike operations use Firestore transactions to keep story like counts synchronized with individual like documents.
+
+---
+
+## Testing
+
+Run TypeScript checks:
+
+    npx tsc --noEmit
+
+Run Firestore Security Rules tests:
+
+    npx firebase-tools emulators:exec "npx jest scripts/firestore.rules.test.js"
+
+---
+
+## Future Improvements
+
+* Display comment counts in the story feed
+* Improved full-text search
+* Advanced story discovery
+* Story reporting
+* Production deployment improvements
+
+---
+
+## Contributing
+
+Contributions are welcome. Feel free to fork the repository, create a feature branch, and submit a pull request.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+---
+
+Developed by **dslord**.
