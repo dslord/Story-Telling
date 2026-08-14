@@ -1,7 +1,11 @@
+# ============================================
+# StoryTelling - Public Repository Git Ignore
+# ============================================
+
 # Dependencies
 node_modules/
 
-# Expo
+# Expo / generated files
 .expo/
 dist/
 web-build/
@@ -9,14 +13,16 @@ web-build/
 # Environment / secrets
 .env
 .env.local
-.env.*.local
+.env*.local
 
-# Firebase config
+# Firebase private configuration
 google-services.json
 GoogleService-Info.plist
+
+# Firebase generated logs
 firebase-debug.log
 
-# Native signing / secrets
+# Native signing / credentials
 *.jks
 *.keystore
 *.p8
@@ -26,7 +32,7 @@ firebase-debug.log
 *.pem
 android/app/debug.keystore
 
-# Generated / build files
+# Build / generated files
 *.tsbuildinfo
 *.orig.*
 .kotlin/
@@ -42,20 +48,14 @@ yarn-error.*
 # OS
 .DS_Store
 
-# IDE / editor
-.vscode/
-.claude/
-
-# AI assistant instructions
-AGENTS.md
-CLAUDE.md
-
-# iOS native project
-/ios
-firestore-debug.log
-
 # Local development / AI tools
 .claude/
 .vscode/
 AGENTS.md
 CLAUDE.md
+
+# Deprecated application
+legacy/
+
+# Explicitly keep this Expo TypeScript file
+!expo-env.d.ts
