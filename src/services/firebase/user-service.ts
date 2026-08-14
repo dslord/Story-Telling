@@ -57,18 +57,14 @@ export async function getUserLikesReceived(uid: string): Promise<number> {
   if (!uid) return 0;
 
   try {
-    const q = query(collections.stories, where('authorUid', '==', uid));
-    const querySnapshot = await getDocs(q);
-
-    let totalLikes = 0;
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      totalLikes += data.likesCount || 0;
-    });
-
-    return totalLikes;
+    const userDocRef = docRefs.user(uid);
+    const docSnap = await getDoc(userDocRef);
+    if (!docSnap.exists()) {
+      return 0;
+    }
+    return docSnap.data().totalLikesReceived || 0;
   } catch (error) {
-    console.error('Error calculating user likes received:', error);
+    console.error('Error fetching user likes received:', error);
     return 0;
   }
 }

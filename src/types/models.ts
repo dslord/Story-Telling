@@ -8,6 +8,7 @@ export interface UserProfile {
   profilePicture: string | null;
   themePreference: 'dark' | 'light';
   createdAt: Timestamp;
+  totalLikesReceived?: number;
 }
 
 export interface Story {

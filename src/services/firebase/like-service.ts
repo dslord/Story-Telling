@@ -41,6 +41,10 @@ export async function likeStory(storyId: string, uid: string): Promise<void> {
       return;
     }
 
+    const storyData = storyDoc.data();
+    const authorUid = storyData.authorUid;
+    const authorRef = docRefs.user(authorUid);
+
     // Set like document under stories/{storyId}/likes/{uid}
     transaction.set(likeRef, {
       likedAt: serverTimestamp() as any,
@@ -50,6 +54,11 @@ export async function likeStory(storyId: string, uid: string): Promise<void> {
     transaction.update(storyRef, {
       likesCount: increment(1),
     });
+
+    // Atomically increment totalLikesReceived on author's profile document (using set with merge: true to handle missing profile docs)
+    transaction.set(authorRef, {
+      totalLikesReceived: increment(1),
+    }, { merge: true });
   });
 }
 
@@ -76,6 +85,10 @@ export async function unlikeStory(storyId: string, uid: string): Promise<void> {
       return;
     }
 
+    const storyData = storyDoc.data();
+    const authorUid = storyData.authorUid;
+    const authorRef = docRefs.user(authorUid);
+
     // Delete like document
     transaction.delete(likeRef);
 
@@ -83,6 +96,11 @@ export async function unlikeStory(storyId: string, uid: string): Promise<void> {
     transaction.update(storyRef, {
       likesCount: increment(-1),
     });
+
+    // Atomically decrement totalLikesReceived on author's profile document
+    transaction.set(authorRef, {
+      totalLikesReceived: increment(-1),
+    }, { merge: true });
   });
 }
 

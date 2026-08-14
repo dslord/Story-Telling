@@ -48,6 +48,7 @@ export async function syncUserProfile(user: User): Promise<void> {
         profilePicture: user.photoURL || null,
         themePreference: 'dark',
         createdAt: serverTimestamp() as any,
+        totalLikesReceived: 0,
       },
       { merge: true }
     );

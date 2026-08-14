@@ -47,3 +47,5 @@ example
 # Firebase configuration
 google-services.json
 GoogleService-Info.plist
+
+firestore-debug.log
