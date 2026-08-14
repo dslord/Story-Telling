@@ -51,4 +51,11 @@ AGENTS.md
 CLAUDE.md
 
 # iOS native project
-/iosfirestore-debug.log
+/ios
+firestore-debug.log
+
+# Local development / AI tools
+.claude/
+.vscode/
+AGENTS.md
+CLAUDE.md
