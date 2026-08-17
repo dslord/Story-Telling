@@ -20,6 +20,7 @@ export interface Story {
   authorUid: string;
   authorName: string;
   likesCount: number;
+  commentsCount: number;
   createdAt: Timestamp;
 }
 

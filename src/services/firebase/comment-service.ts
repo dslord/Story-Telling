@@ -1,14 +1,16 @@
 import {
-  addDoc,
   deleteDoc,
+  doc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
 
-import { auth } from '@/config/firebase';
+import { auth, db } from '@/config/firebase';
 import { docRefs, storyCommentsCollection } from './collections';
 import { StoryComment } from '@/types/models';
 import { getCurrentUserProfile } from './user-service';
@@ -51,6 +53,8 @@ export async function createComment(storyId: string, text: string): Promise<stri
     authorName = currentUser.email.split('@')[0];
   }
 
+  const storyRef = docRefs.story(storyId);
+  const commentRef = doc(storyCommentsCollection(storyId));
   const commentData = {
     storyId,
     authorUid: currentUser.uid,
@@ -59,8 +63,19 @@ export async function createComment(storyId: string, text: string): Promise<stri
     createdAt: serverTimestamp(),
   };
 
-  const docRef = await addDoc(storyCommentsCollection(storyId), commentData);
-  return docRef.id;
+  await runTransaction(db, async (transaction) => {
+    const storySnap = await transaction.get(storyRef);
+    if (!storySnap.exists()) {
+      throw new Error('Story does not exist.');
+    }
+
+    transaction.set(commentRef, commentData);
+    transaction.update(storyRef, {
+      commentsCount: increment(1),
+    });
+  });
+
+  return commentRef.id;
 }
 
 /**
@@ -106,5 +121,35 @@ export async function deleteComment(storyId: string, commentId: string): Promise
   }
 
   const commentRef = docRefs.storyComment(storyId, commentId);
-  await deleteDoc(commentRef);
+  const storyRef = docRefs.story(storyId);
+
+  await runTransaction(db, async (transaction) => {
+    const commentSnap = await transaction.get(commentRef);
+    const storySnap = await transaction.get(storyRef);
+
+    if (!commentSnap.exists()) {
+      throw new Error('Comment does not exist.');
+    }
+
+    if (!storySnap.exists()) {
+      throw new Error('Story does not exist.');
+    }
+
+    const commentData = commentSnap.data();
+    const storyData = storySnap.data();
+    const currentCount = Number(storyData.commentsCount ?? 0);
+
+    if (commentData.authorUid !== currentUser.uid && storyData.authorUid !== currentUser.uid) {
+      throw new Error('You do not have permission to delete this comment.');
+    }
+
+    if (currentCount <= 0) {
+      throw new Error('Comments count cannot be negative.');
+    }
+
+    transaction.delete(commentRef);
+    transaction.update(storyRef, {
+      commentsCount: increment(-1),
+    });
+  });
 }

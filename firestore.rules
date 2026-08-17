@@ -69,6 +69,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.likesCount == 0
+        && request.resource.data.commentsCount == 0
         && request.resource.data.createdAt == request.time
         && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
         && request.resource.data.description is string && request.resource.data.description.size() > 0 && request.resource.data.description.size() <= 1000
@@ -76,10 +77,10 @@ service cloud.firestore {
         && request.resource.data.moral is string && request.resource.data.moral.size() > 0 && request.resource.data.moral.size() <= 500
         && request.resource.data.authorName is string && request.resource.data.authorName.size() > 0
         && request.resource.data.keys().hasOnly([
-          'title', 'description', 'story', 'moral', 'authorUid', 'authorName', 'likesCount', 'createdAt'
+          'title', 'description', 'story', 'moral', 'authorUid', 'authorName', 'likesCount', 'commentsCount', 'createdAt'
         ]);
 
-      // Story updates: split into two permitted cases (content edit by owner, or like/unlike by anyone)
+      // Story updates: split into three permitted cases (content edit by owner, likes, or commentsCount continuation)
       allow update: if request.auth != null && (
         // Case A: Owner editing story content fields
         (
@@ -130,6 +131,39 @@ service cloud.firestore {
                   !('totalLikesReceived' in get(/databases/$(database)/documents/users/$(resource.data.authorUid)).data)
                   && getAfter(/databases/$(database)/documents/users/$(resource.data.authorUid)).data.totalLikesReceived == 0
                 )
+              )
+            )
+          )
+        )
+        ||
+        // Case C: Comment create/delete by an authenticated user, incrementing/decrementing commentsCount by exactly 1.
+        // The exact doc-level pairing is validated in the comment document rules, while story updates remain limited to ±1 and non-negative values.
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount'])
+          && (
+            (
+              (
+                'commentsCount' in resource.data
+                && request.resource.data.commentsCount == resource.data.commentsCount + 1
+                && request.resource.data.commentsCount >= 0
+              )
+              ||
+              (
+                !('commentsCount' in resource.data)
+                && request.resource.data.commentsCount == 1
+              )
+            )
+            ||
+            (
+              (
+                'commentsCount' in resource.data
+                && request.resource.data.commentsCount == resource.data.commentsCount - 1
+                && request.resource.data.commentsCount >= 0
+              )
+              ||
+              (
+                !('commentsCount' in resource.data)
+                && request.resource.data.commentsCount == 0
               )
             )
           )
@@ -191,7 +225,7 @@ service cloud.firestore {
       // Authenticated users can read comments
       allow read: if request.auth != null;
 
-      // Authenticated users can create comments
+      // Authenticated users can create comments, and the parent story's commentsCount must increment by exactly 1 in the same transaction.
       allow create: if request.auth != null
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.storyId == storyId
@@ -201,12 +235,61 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.authorName is string
         && request.resource.data.authorName.size() > 0
-        && request.resource.data.keys().hasOnly(['storyId', 'authorUid', 'authorName', 'text', 'createdAt']);
+        && request.resource.data.keys().hasOnly(['storyId', 'authorUid', 'authorName', 'text', 'createdAt'])
+        && exists(/databases/$(database)/documents/stories/$(storyId))
+        && (
+          (
+            'commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data
+            && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == get(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount + 1
+          )
+          ||
+          (
+            !('commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data)
+            && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == 1
+          )
+        )
+        && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount >= 0;
 
-      // Comment author or parent story owner can delete
+      // Comment author or parent story owner can delete. For legacy stories that do not yet have commentsCount, deletion is allowed when the count is absent or resets to 0.
       allow delete: if request.auth != null && (
-        resource.data.authorUid == request.auth.uid
-        || get(/databases/$(database)/documents/stories/$(storyId)).data.authorUid == request.auth.uid
+        (
+          resource.data.authorUid == request.auth.uid
+          && (
+            !exists(/databases/$(database)/documents/stories/$(storyId))
+            || (
+              exists(/databases/$(database)/documents/stories/$(storyId))
+              && (
+                (
+                  'commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data
+                  && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == get(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount - 1
+                  && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount >= 0
+                )
+                ||
+                (
+                  !('commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data)
+                  && (!('commentsCount' in getAfter(/databases/$(database)/documents/stories/$(storyId)).data) || getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == 0)
+                )
+              )
+            )
+          )
+        )
+        ||
+        (
+          exists(/databases/$(database)/documents/stories/$(storyId))
+          && get(/databases/$(database)/documents/stories/$(storyId)).data.authorUid == request.auth.uid
+          && (
+            (
+              'commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data
+              && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == get(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount - 1
+              && getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount >= 0
+            )
+            ||
+            (
+              !('commentsCount' in get(/databases/$(database)/documents/stories/$(storyId)).data)
+              && (!('commentsCount' in getAfter(/databases/$(database)/documents/stories/$(storyId)).data) || getAfter(/databases/$(database)/documents/stories/$(storyId)).data.commentsCount == 0)
+            )
+          )
+        )
       );
 
       // Comments cannot be updated

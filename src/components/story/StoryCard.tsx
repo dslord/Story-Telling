@@ -47,6 +47,9 @@ export function StoryCard({
               <ThemedText type="small" themeColor="textSecondary">
                 ❤️ {story.likesCount ?? 0}
               </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                💬 {story.commentsCount ?? 0}
+              </ThemedText>
               {Boolean(formattedDate) && (
                 <ThemedText type="small" themeColor="textSecondary">
                   • {formattedDate}

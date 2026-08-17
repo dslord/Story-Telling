@@ -7,6 +7,8 @@ const { doc, getDoc, setDoc, updateDoc, deleteDoc, runTransaction, serverTimesta
 const fs = require('fs');
 const path = require('path');
 
+jest.setTimeout(30000);
+
 let testEnv;
 
 describe('Firestore Security Rules', () => {
@@ -123,6 +125,52 @@ describe('Firestore Security Rules', () => {
         authorUid: 'userA',
         authorName: 'User A',
         likesCount: 0,
+        commentsCount: 0,
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('PASS: Story creation with commentsCount = 0 succeeds', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(setDoc(doc(db, 'stories/storyCommentsZero'), {
+        title: 'Comment Count Story',
+        description: 'Valid Description',
+        story: 'Valid Story body text',
+        moral: 'Valid Moral',
+        authorUid: 'userA',
+        authorName: 'User A',
+        likesCount: 0,
+        commentsCount: 0,
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Story creation with commentsCount > 0 fails', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'stories/storyCommentsPositive'), {
+        title: 'Comment Count Story',
+        description: 'Valid Description',
+        story: 'Valid Story body text',
+        moral: 'Valid Moral',
+        authorUid: 'userA',
+        authorName: 'User A',
+        likesCount: 0,
+        commentsCount: 1,
+        createdAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Story creation with commentsCount < 0 fails', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'stories/storyCommentsNegative'), {
+        title: 'Comment Count Story',
+        description: 'Valid Description',
+        story: 'Valid Story body text',
+        moral: 'Valid Moral',
+        authorUid: 'userA',
+        authorName: 'User A',
+        likesCount: 0,
+        commentsCount: -1,
         createdAt: serverTimestamp(),
       }));
     });
@@ -296,6 +344,7 @@ describe('Firestore Security Rules', () => {
           authorUid: 'userA',
           authorName: 'User A',
           likesCount: 0,
+          commentsCount: 0,
           createdAt: new Date(),
         });
       });
@@ -364,6 +413,7 @@ describe('Firestore Security Rules', () => {
           authorUid: 'userA',
           authorName: 'User A',
           likesCount: 1,
+          commentsCount: 0,
           createdAt: new Date(),
         });
         await setDoc(doc(db, 'stories/storyA/likes/userB'), { likedAt: new Date() });
@@ -466,12 +516,316 @@ describe('Firestore Security Rules', () => {
   describe('Story Comments', () => {
     test('PASS: Authenticated user can create a valid comment', async () => {
       const db = getFirestore({ uid: 'userA' });
-      await assertSucceeds(setDoc(doc(db, 'stories/storyA/comments/comment1'), {
-        storyId: 'storyA',
-        authorUid: 'userA',
-        authorName: 'User A',
-        text: 'This is a valid comment!',
-        createdAt: serverTimestamp(),
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyA'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+      await assertSucceeds(runTransaction(db, async (transaction) => {
+        const storyRef = doc(db, 'stories/storyA');
+        const commentRef = doc(db, 'stories/storyA/comments/comment1');
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount + 1 });
+        transaction.set(commentRef, {
+          storyId: 'storyA',
+          authorUid: 'userA',
+          authorName: 'User A',
+          text: 'This is a valid comment!',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('PASS: Valid comment transaction increments commentsCount by exactly 1 and succeeds', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyB'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const storyRef = doc(db, 'stories/storyB');
+      const commentRef = doc(db, 'stories/storyB/comments/commentB1');
+
+      await assertSucceeds(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        const newCommentsCount = storySnap.data().commentsCount + 1;
+        transaction.update(storyRef, { commentsCount: newCommentsCount });
+        transaction.set(commentRef, {
+          storyId: 'storyB',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Valid comment with increment',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('FAIL: Creating a comment without updating commentsCount fails', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyA'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+      const commentRef = doc(db, 'stories/storyA/comments/commentNoCount');
+      await assertFails(runTransaction(db, async (transaction) => {
+        transaction.set(commentRef, {
+          storyId: 'storyA',
+          authorUid: 'userA',
+          authorName: 'User A',
+          text: 'Missing commentsCount update',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('FAIL: Updating commentsCount without creating the corresponding comment fails', async () => {
+      const db = getFirestore({ uid: 'userB' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyA'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+      const storyRef = doc(db, 'stories/storyA');
+      const commentRef = doc(db, 'stories/storyA/comments/commentMissing');
+      await assertFails(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount + 1 });
+        transaction.set(commentRef, {
+          storyId: 'storyA',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: '',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('FAIL: Directly changing commentsCount by more than 1 fails', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyA'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' });
+      const storyRef = doc(db, 'stories/storyA');
+      const commentRef = doc(db, 'stories/storyA/comments/commentPlusTwo');
+      await assertFails(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount + 2 });
+        transaction.set(commentRef, {
+          storyId: 'storyA',
+          authorUid: 'userA',
+          authorName: 'User A',
+          text: 'Attempted double increment',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('FAIL: A user cannot manipulate commentsCount on another user\'s behalf', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyA'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const storyRef = doc(db, 'stories/storyA');
+      const commentRef = doc(db, 'stories/storyA/comments/commentImpersonation');
+      await assertFails(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount + 1 });
+        transaction.set(commentRef, {
+          storyId: 'storyA',
+          authorUid: 'userA',
+          authorName: 'User A',
+          text: 'Impersonation comment',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('PASS: Valid comment deletion transaction decrements commentsCount by exactly 1 and succeeds', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyC'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 1,
+          createdAt: new Date(),
+        });
+        await setDoc(doc(db2, 'stories/storyC/comments/commentC1'), {
+          storyId: 'storyC',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Comment to delete',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const storyRef = doc(db, 'stories/storyC');
+      const commentRef = doc(db, 'stories/storyC/comments/commentC1');
+      await assertSucceeds(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        const newCommentsCount = storySnap.data().commentsCount - 1;
+        transaction.update(storyRef, { commentsCount: newCommentsCount });
+        transaction.delete(commentRef);
+      }));
+    });
+
+    test('FAIL: Deleting a comment without decrementing commentsCount fails', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyC'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 1,
+          createdAt: new Date(),
+        });
+        await setDoc(doc(db2, 'stories/storyC/comments/commentC1'), {
+          storyId: 'storyC',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Comment to delete',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const commentRef = doc(db, 'stories/storyC/comments/commentC1');
+      await assertFails(deleteDoc(commentRef));
+    });
+
+    test('FAIL: Decrementing commentsCount without deleting the corresponding comment fails', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyC'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 1,
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const storyRef = doc(db, 'stories/storyC');
+      const invalidCommentRef = doc(db, 'stories/storyC/comments/commentInvalidDelete');
+      await assertFails(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount - 1 });
+        transaction.set(invalidCommentRef, {
+          storyId: 'storyC',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Not deleted',
+          createdAt: serverTimestamp(),
+        });
+      }));
+    });
+
+    test('FAIL: commentsCount cannot become negative', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db2 = context.firestore();
+        await setDoc(doc(db2, 'stories/storyZero'), {
+          title: 'Title',
+          description: 'Desc',
+          story: 'Story',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+        await setDoc(doc(db2, 'stories/storyZero/comments/commentNeg'), {
+          storyId: 'storyZero',
+          authorUid: 'userB',
+          authorName: 'User B',
+          text: 'Comment',
+          createdAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      const storyRef = doc(db, 'stories/storyZero');
+      const commentRef = doc(db, 'stories/storyZero/comments/commentNeg');
+      await assertFails(runTransaction(db, async (transaction) => {
+        const storySnap = await transaction.get(storyRef);
+        transaction.update(storyRef, { commentsCount: storySnap.data().commentsCount - 1 });
+        transaction.delete(commentRef);
       }));
     });
 

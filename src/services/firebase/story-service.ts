@@ -125,6 +125,7 @@ export async function createStory(input: CreateStoryInput): Promise<string> {
     authorUid,
     authorName,
     likesCount: 0,
+    commentsCount: 0,
     createdAt: serverTimestamp(),
   });
 
