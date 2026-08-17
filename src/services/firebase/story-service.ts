@@ -1,20 +1,26 @@
 import {
   addDoc,
+  DocumentSnapshot,
   endAt,
   getDoc,
   getDocs,
   limit,
   orderBy,
+  OrderByDirection,
   query,
+  QueryConstraint,
   runTransaction,
   serverTimestamp,
+  startAfter,
   startAt,
   where,
 } from 'firebase/firestore';
 
 import { auth, db } from '@/config/firebase';
 import { collections, docRefs, storyLikesCollection } from './collections';
-import { Story } from '@/types/models';
+import { Story, SortMode } from '@/types/models';
+
+const PAGE_SIZE = 10;
 
 export interface CreateStoryInput {
   title: string;
@@ -30,11 +36,21 @@ export interface UpdateStoryInput {
   moral: string;
 }
 
+export interface PaginatedStories {
+  stories: Story[];
+  lastDoc: DocumentSnapshot<unknown> | null;
+  hasMore: boolean;
+}
+
 /**
- * Fetches all published stories from Firestore ordered by creation date descending.
+ * Fetches the first page of published stories from Firestore with pagination support.
+ * @param sortMode The sorting mode: 'latest' (default), 'mostLiked', or 'mostCommented'
+ * @returns PaginatedStories object containing stories, cursor, and hasMore flag
  */
-export async function fetchStories(): Promise<Story[]> {
-  const q = query(collections.stories, orderBy('createdAt', 'desc'));
+export async function fetchStories(sortMode: SortMode = 'latest'): Promise<PaginatedStories> {
+  const orderByClause = getOrderByClause(sortMode);
+
+  const q = query(collections.stories, orderByClause, limit(PAGE_SIZE));
   const querySnapshot = await getDocs(q);
 
   const stories: Story[] = [];
@@ -42,10 +58,65 @@ export async function fetchStories(): Promise<Story[]> {
     stories.push({
       ...doc.data(),
       id: doc.id,
-    });
+    } as Story);
   });
 
-  return stories;
+  const lastDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1] : null;
+  const hasMore = querySnapshot.docs.length === PAGE_SIZE;
+
+  return {
+    stories,
+    lastDoc,
+    hasMore,
+  };
+}
+
+/**
+ * Fetches the next page of stories using a cursor (lastDoc).
+ * @param sortMode The sorting mode for consistent ordering
+ * @param lastDoc The last document from the previous query (cursor)
+ * @returns PaginatedStories object containing stories, cursor, and hasMore flag
+ */
+export async function fetchMoreStories(
+  sortMode: SortMode,
+  lastDoc: DocumentSnapshot<unknown>
+): Promise<PaginatedStories> {
+  const orderByClause = getOrderByClause(sortMode);
+
+  const q = query(collections.stories, orderByClause, startAfter(lastDoc), limit(PAGE_SIZE));
+  const querySnapshot = await getDocs(q);
+
+  const stories: Story[] = [];
+  querySnapshot.forEach((doc) => {
+    stories.push({
+      ...doc.data(),
+      id: doc.id,
+    } as Story);
+  });
+
+  const newLastDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1] : null;
+  const hasMore = querySnapshot.docs.length === PAGE_SIZE;
+
+  return {
+    stories,
+    lastDoc: newLastDoc,
+    hasMore,
+  };
+}
+
+/**
+ * Helper function to get the orderBy clause based on sort mode.
+ */
+function getOrderByClause(sortMode: SortMode): QueryConstraint {
+  switch (sortMode) {
+    case 'mostLiked':
+      return orderBy('likesCount', 'desc');
+    case 'mostCommented':
+      return orderBy('commentsCount', 'desc');
+    case 'latest':
+    default:
+      return orderBy('createdAt', 'desc');
+  }
 }
 
 /**

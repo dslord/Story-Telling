@@ -1,5 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type SortMode = 'latest' | 'mostLiked' | 'mostCommented';
+
 export interface UserProfile {
   uid: string;
   email: string;
