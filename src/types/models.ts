@@ -38,3 +38,9 @@ export interface StoryComment {
   text: string;
   createdAt: Timestamp;
 }
+
+export interface SavedStory {
+  storyId: string;
+  savedAt: Timestamp;
+}
+

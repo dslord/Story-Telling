@@ -19,6 +19,12 @@ import { useThemeContext } from '@/context/theme-context';
 import { useAuth } from '@/services/auth/auth-provider';
 import { deleteStory, fetchUserStories } from '@/services/firebase/story-service';
 import {
+  fetchSavedStories,
+  fetchSavedStoryIds,
+  saveStory,
+  unsaveStory,
+} from '@/services/firebase/save-service';
+import {
   getCurrentUserProfile,
   getUserLikesReceived,
   getUserStoryCount,
@@ -44,6 +50,41 @@ export default function ProfileScreen() {
   const [signingOut, setSigningOut] = useState<boolean>(false);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Saved stories state
+  const [activeTab, setActiveTab] = useState<'myStories' | 'savedStories'>('myStories');
+  const [savedStories, setSavedStories] = useState<Story[]>([]);
+  const [savedStoriesLoading, setSavedStoriesLoading] = useState<boolean>(false);
+  const [savedStoriesError, setSavedStoriesError] = useState<string | null>(null);
+  const [savedStoryIds, setSavedStoryIds] = useState<Set<string>>(new Set());
+  const [savingStoryIds, setSavingStoryIds] = useState<Set<string>>(new Set());
+
+  const loadSavedStoryIds = useCallback(async () => {
+    if (!user) return;
+    try {
+      const ids = await fetchSavedStoryIds(user.uid);
+      setSavedStoryIds(new Set(ids));
+    } catch (err) {
+      console.warn('Failed to load saved story IDs:', err);
+    }
+  }, [user]);
+
+  const loadSavedStoriesData = useCallback(async (silent = false) => {
+    if (!user) return;
+    try {
+      if (!silent) {
+        setSavedStoriesLoading(true);
+      }
+      setSavedStoriesError(null);
+      const storiesResult = await fetchSavedStories(user.uid);
+      setSavedStories(storiesResult);
+    } catch (err: any) {
+      console.error('Error fetching saved stories:', err);
+      setSavedStoriesError('Failed to load saved stories. Please pull down to retry.');
+    } finally {
+      setSavedStoriesLoading(false);
+    }
+  }, [user]);
 
   const loadProfileData = useCallback(async (isRefresh = false) => {
     if (!user) {
@@ -72,6 +113,10 @@ export default function ProfileScreen() {
           setStoriesError('Failed to load your stories. Please pull down to retry.');
           return null;
         }),
+        loadSavedStoryIds(),
+        activeTab === 'savedStories' || isRefresh
+          ? loadSavedStoriesData(true)
+          : Promise.resolve(),
       ]);
 
       if (fetchedProfile) {
@@ -106,11 +151,59 @@ export default function ProfileScreen() {
       setStoriesLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, activeTab, loadSavedStoriesData, loadSavedStoryIds]);
 
   useEffect(() => {
     loadProfileData();
   }, [loadProfileData]);
+
+  useEffect(() => {
+    if (activeTab === 'savedStories') {
+      loadSavedStoriesData();
+    }
+  }, [activeTab, loadSavedStoriesData]);
+
+  const handleToggleSave = async (storyId: string) => {
+    if (!user) return;
+
+    const wasSaved = savedStoryIds.has(storyId);
+
+    setSavingStoryIds((prev) => {
+      const next = new Set(prev);
+      next.add(storyId);
+      return next;
+    });
+
+    try {
+      if (wasSaved) {
+        await unsaveStory(storyId);
+        setSavedStoryIds((prev) => {
+          const next = new Set(prev);
+          next.delete(storyId);
+          return next;
+        });
+        if (activeTab === 'savedStories') {
+          setSavedStories((prev) => prev.filter((s) => s.id !== storyId));
+        }
+      } else {
+        await saveStory(storyId);
+        setSavedStoryIds((prev) => {
+          const next = new Set(prev);
+          next.add(storyId);
+          return next;
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle save:', err);
+      Alert.alert('Error', err?.message || 'Failed to update saved story.');
+    } finally {
+      setSavingStoryIds((prev) => {
+        const next = new Set(prev);
+        next.delete(storyId);
+        return next;
+      });
+    }
+  };
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -242,55 +335,124 @@ export default function ProfileScreen() {
                 </ThemedView>
               </View>
 
-              {/* My Stories Section */}
+              {/* Stories Section with Tabs */}
               <View style={styles.myStoriesSection}>
-                <View style={styles.sectionHeader}>
-                  <ThemedText type="subtitle" style={styles.sectionTitle}>
-                    My Stories
-                  </ThemedText>
+                <View style={styles.tabHeaderContainer}>
+                  <Pressable
+                    style={[
+                      styles.tabHeaderButton,
+                      activeTab === 'myStories' && styles.activeTabHeaderButton,
+                    ]}
+                    onPress={() => setActiveTab('myStories')}
+                  >
+                    <ThemedText
+                      type="subtitle"
+                      style={[
+                        styles.tabHeaderText,
+                        activeTab === 'myStories' ? styles.activeTabHeaderText : styles.inactiveTabHeaderText,
+                      ]}
+                    >
+                      My Stories
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.tabHeaderButton,
+                      activeTab === 'savedStories' && styles.activeTabHeaderButton,
+                    ]}
+                    onPress={() => setActiveTab('savedStories')}
+                  >
+                    <ThemedText
+                      type="subtitle"
+                      style={[
+                        styles.tabHeaderText,
+                        activeTab === 'savedStories' ? styles.activeTabHeaderText : styles.inactiveTabHeaderText,
+                      ]}
+                    >
+                      Saved Stories
+                    </ThemedText>
+                  </Pressable>
                 </View>
 
-                {storiesLoading && !refreshing ? (
-                  <View style={styles.storiesLoadingContainer}>
-                    <ActivityIndicator size="small" color={theme.text} />
-                    <ThemedText themeColor="textSecondary" style={styles.storiesLoadingText}>
-                      Loading your stories...
-                    </ThemedText>
-                  </View>
-                ) : storiesError ? (
-                  <View style={styles.storiesErrorBox}>
-                    <ThemedText style={styles.storiesErrorText}>{storiesError}</ThemedText>
-                  </View>
-                ) : userStories.length === 0 ? (
-                  <ThemedView type="backgroundElement" style={styles.emptyContainer}>
-                    <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                      You haven't published any stories yet.
-                    </ThemedText>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.createButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => router.push('/create')}
-                    >
-                      <ThemedText style={styles.createButtonText}>
-                        Create a Story
+                {activeTab === 'myStories' ? (
+                  storiesLoading && !refreshing ? (
+                    <View style={styles.storiesLoadingContainer}>
+                      <ActivityIndicator size="small" color={theme.text} />
+                      <ThemedText themeColor="textSecondary" style={styles.storiesLoadingText}>
+                        Loading your stories...
                       </ThemedText>
-                    </Pressable>
-                  </ThemedView>
+                    </View>
+                  ) : storiesError ? (
+                    <View style={styles.storiesErrorBox}>
+                      <ThemedText style={styles.storiesErrorText}>{storiesError}</ThemedText>
+                    </View>
+                  ) : userStories.length === 0 ? (
+                    <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+                      <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                        You haven't published any stories yet.
+                      </ThemedText>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.createButton,
+                          pressed && styles.buttonPressed,
+                        ]}
+                        onPress={() => router.push('/create')}
+                      >
+                        <ThemedText style={styles.createButtonText}>
+                          Create a Story
+                        </ThemedText>
+                      </Pressable>
+                    </ThemedView>
+                  ) : (
+                    <View style={styles.storiesList}>
+                      {userStories.map((story) => (
+                        <StoryCard
+                          key={story.id}
+                          story={story}
+                          onPress={() => router.push(`/story/${story.id}`)}
+                          onEdit={() => router.push(`/story/edit/${story.id}`)}
+                          onDelete={() => handleDeleteStory(story.id, story.title, story.likesCount)}
+                          deleting={deletingId === story.id}
+                          isSaved={savedStoryIds.has(story.id)}
+                          onToggleSave={() => handleToggleSave(story.id)}
+                          saving={savingStoryIds.has(story.id)}
+                        />
+                      ))}
+                    </View>
+                  )
                 ) : (
-                  <View style={styles.storiesList}>
-                    {userStories.map((story) => (
-                      <StoryCard
-                        key={story.id}
-                        story={story}
-                        onPress={() => router.push(`/story/${story.id}`)}
-                        onEdit={() => router.push(`/story/edit/${story.id}`)}
-                        onDelete={() => handleDeleteStory(story.id, story.title, story.likesCount)}
-                        deleting={deletingId === story.id}
-                      />
-                    ))}
-                  </View>
+                  savedStoriesLoading && !refreshing ? (
+                    <View style={styles.storiesLoadingContainer}>
+                      <ActivityIndicator size="small" color={theme.text} />
+                      <ThemedText themeColor="textSecondary" style={styles.storiesLoadingText}>
+                        Loading saved stories...
+                      </ThemedText>
+                    </View>
+                  ) : savedStoriesError ? (
+                    <View style={styles.storiesErrorBox}>
+                      <ThemedText style={styles.storiesErrorText}>{savedStoriesError}</ThemedText>
+                    </View>
+                  ) : savedStories.length === 0 ? (
+                    <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+                      <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                        You don't have any saved stories yet.
+                      </ThemedText>
+                    </ThemedView>
+                  ) : (
+                    <View style={styles.storiesList}>
+                      {savedStories.map((story) => (
+                        <StoryCard
+                          key={story.id}
+                          story={story}
+                          onPress={() => router.push(`/story/${story.id}`)}
+                          isSaved={true}
+                          onToggleSave={() => handleToggleSave(story.id)}
+                          saving={savingStoryIds.has(story.id)}
+                        />
+                      ))}
+                    </View>
+                  )
                 )}
               </View>
 
@@ -572,5 +734,31 @@ const styles = StyleSheet.create({
   },
   themeOptionTextActive: {
     color: '#3b82f6',
+  },
+  tabHeaderContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.15)',
+    marginBottom: 16,
+  },
+  tabHeaderButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTabHeaderButton: {
+    borderBottomColor: '#3b82f6',
+  },
+  tabHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  activeTabHeaderText: {
+    color: '#3b82f6',
+  },
+  inactiveTabHeaderText: {
+    color: '#888888',
   },
 });

@@ -21,6 +21,7 @@ GoogleService-Info.plist
 
 # Firebase generated logs
 firebase-debug.log
+firestore-debug.log
 
 # Native signing / credentials
 *.jks

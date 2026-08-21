@@ -953,4 +953,119 @@ describe('Firestore Security Rules', () => {
       }));
     });
   });
+
+  describe('Saved Stories', () => {
+    beforeEach(async () => {
+      // Setup: Create a story that exists
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'stories/storyExist'), {
+          title: 'Existing Story',
+          description: 'Description',
+          story: 'Once upon a time...',
+          moral: 'Moral',
+          authorUid: 'userA',
+          authorName: 'User A',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: new Date(),
+        });
+      });
+    });
+
+    test('PASS: Authenticated user can save an existing story', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+        storyId: 'storyExist',
+        savedAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: Unauthenticated user cannot save a story', async () => {
+      const db = getUnauthenticatedFirestore();
+      await assertFails(setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+        storyId: 'storyExist',
+        savedAt: serverTimestamp(),
+      }));
+    });
+
+    test('PASS: User can read their own saved story', async () => {
+      // Setup: Pre-save story with security rules disabled
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+          storyId: 'storyExist',
+          savedAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(getDoc(doc(db, 'users/userA/savedStories/storyExist')));
+    });
+
+    test('FAIL: User cannot read another user\'s saved stories', async () => {
+      const db = getFirestore({ uid: 'userB' });
+      await assertFails(getDoc(doc(db, 'users/userA/savedStories/storyExist')));
+    });
+
+    test('FAIL: User cannot create a saved story under another user\'s UID', async () => {
+      const db = getFirestore({ uid: 'userB' });
+      await assertFails(setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+        storyId: 'storyExist',
+        savedAt: serverTimestamp(),
+      }));
+    });
+
+    test('FAIL: User cannot modify / update a saved story', async () => {
+      // Setup: Pre-save story under userA
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+          storyId: 'storyExist',
+          savedAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(updateDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+        savedAt: serverTimestamp(),
+      }));
+    });
+
+    test('PASS: User can delete their own saved story', async () => {
+      // Setup: Pre-save story under userA
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+          storyId: 'storyExist',
+          savedAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userA' });
+      await assertSucceeds(deleteDoc(doc(db, 'users/userA/savedStories/storyExist')));
+    });
+
+    test('FAIL: User cannot delete another user\'s saved story', async () => {
+      // Setup: Pre-save story under userA
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users/userA/savedStories/storyExist'), {
+          storyId: 'storyExist',
+          savedAt: new Date(),
+        });
+      });
+
+      const db = getFirestore({ uid: 'userB' });
+      await assertFails(deleteDoc(doc(db, 'users/userA/savedStories/storyExist')));
+    });
+
+    test('FAIL: User cannot save a story that does not exist', async () => {
+      const db = getFirestore({ uid: 'userA' });
+      await assertFails(setDoc(doc(db, 'users/userA/savedStories/nonExistentStory'), {
+        storyId: 'nonExistentStory',
+        savedAt: serverTimestamp(),
+      }));
+    });
+  });
 });

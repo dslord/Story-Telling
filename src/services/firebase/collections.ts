@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/config/firebase';
-import { UserProfile, Story, StoryLike, StoryComment } from '@/types/models';
+import { UserProfile, Story, StoryLike, StoryComment, SavedStory } from '@/types/models';
 
 export const collections = {
   users: collection(db, 'users') as CollectionReference<UserProfile>,
@@ -22,6 +22,8 @@ export const docRefs = {
     doc(db, 'stories', storyId, 'likes', uid) as DocumentReference<StoryLike>,
   storyComment: (storyId: string, commentId: string): DocumentReference<StoryComment> =>
     doc(db, 'stories', storyId, 'comments', commentId) as DocumentReference<StoryComment>,
+  savedStory: (uid: string, storyId: string): DocumentReference<SavedStory> =>
+    doc(db, 'users', uid, 'savedStories', storyId) as DocumentReference<SavedStory>,
 };
 
 export const storyLikesCollection = (storyId: string): CollectionReference<StoryLike> =>
@@ -29,3 +31,7 @@ export const storyLikesCollection = (storyId: string): CollectionReference<Story
 
 export const storyCommentsCollection = (storyId: string): CollectionReference<StoryComment> =>
   collection(db, 'stories', storyId, 'comments') as CollectionReference<StoryComment>;
+
+export const userSavedStoriesCollection = (uid: string): CollectionReference<SavedStory> =>
+  collection(db, 'users', uid, 'savedStories') as CollectionReference<SavedStory>;
+

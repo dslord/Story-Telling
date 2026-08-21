@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DocumentSnapshot } from 'firebase/firestore';
 
@@ -9,6 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchMoreStories, fetchStories } from '@/services/firebase/story-service';
+import { useAuth } from '@/services/auth/auth-provider';
+import { fetchSavedStoryIds, saveStory, unsaveStory } from '@/services/firebase/save-service';
 import { Story, SortMode } from '@/types/models';
 import { Spacing } from '@/constants/theme';
 
@@ -40,6 +42,8 @@ function SortButton({ label, active, onPress, theme }: SortButtonProps) {
 export default function FeedScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const { user } = useAuth();
+  
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -49,6 +53,22 @@ export default function FeedScreen() {
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot<unknown> | null>(null);
   const [hasMore, setHasMore] = useState<boolean>(false);
   const loadingMoreRef = useRef<boolean>(false);
+
+  const [savedStoryIds, setSavedStoryIds] = useState<Set<string>>(new Set());
+  const [savingStoryIds, setSavingStoryIds] = useState<Set<string>>(new Set());
+
+  const loadSavedStoryIds = useCallback(async () => {
+    if (!user) {
+      setSavedStoryIds(new Set());
+      return;
+    }
+    try {
+      const ids = await fetchSavedStoryIds(user.uid);
+      setSavedStoryIds(new Set(ids));
+    } catch (err) {
+      console.warn('Failed to load saved story IDs:', err);
+    }
+  }, [user]);
 
   const loadStories = useCallback(
     async (isRefresh = false) => {
@@ -61,7 +81,10 @@ export default function FeedScreen() {
       setError(null);
 
       try {
-        const result = await fetchStories(sortMode);
+        const [result] = await Promise.all([
+          fetchStories(sortMode),
+          loadSavedStoryIds(),
+        ]);
         setStories(result.stories);
         setLastDoc(result.lastDoc);
         setHasMore(result.hasMore);
@@ -75,7 +98,7 @@ export default function FeedScreen() {
         setRefreshing(false);
       }
     },
-    [sortMode]
+    [sortMode, loadSavedStoryIds]
   );
 
   const loadMoreStories = useCallback(async () => {
@@ -104,6 +127,10 @@ export default function FeedScreen() {
     loadStories();
   }, [loadStories]);
 
+  useEffect(() => {
+    loadSavedStoryIds();
+  }, [loadSavedStoryIds]);
+
   const handleRefresh = () => {
     loadStories(true);
   };
@@ -115,6 +142,52 @@ export default function FeedScreen() {
   const handleEndReached = () => {
     if (hasMore && !loadingMore && !loadingMoreRef.current) {
       loadMoreStories();
+    }
+  };
+
+  const handleToggleSave = async (storyId: string) => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to save stories.');
+      return;
+    }
+
+    const wasSaved = savedStoryIds.has(storyId);
+
+    // Optimistically update
+    setSavedStoryIds((prev) => {
+      const next = new Set(prev);
+      if (wasSaved) next.delete(storyId);
+      else next.add(storyId);
+      return next;
+    });
+
+    setSavingStoryIds((prev) => {
+      const next = new Set(prev);
+      next.add(storyId);
+      return next;
+    });
+
+    try {
+      if (wasSaved) {
+        await unsaveStory(storyId);
+      } else {
+        await saveStory(storyId);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle save:', err);
+      setSavedStoryIds((prev) => {
+        const next = new Set(prev);
+        if (wasSaved) next.add(storyId);
+        else next.delete(storyId);
+        return next;
+      });
+      Alert.alert('Error', err?.message || 'Failed to update saved story.');
+    } finally {
+      setSavingStoryIds((prev) => {
+        const next = new Set(prev);
+        next.delete(storyId);
+        return next;
+      });
     }
   };
 
@@ -158,7 +231,13 @@ export default function FeedScreen() {
             data={stories}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <StoryCard story={item} onPress={() => handleStoryPress(item.id)} />
+              <StoryCard
+                story={item}
+                onPress={() => handleStoryPress(item.id)}
+                isSaved={savedStoryIds.has(item.id)}
+                onToggleSave={() => handleToggleSave(item.id)}
+                saving={savingStoryIds.has(item.id)}
+              />
             )}
             contentContainerStyle={styles.listContent}
             onEndReached={handleEndReached}

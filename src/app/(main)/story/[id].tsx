@@ -21,6 +21,7 @@ import {
   unlikeStory,
 } from '@/services/firebase/like-service';
 import { fetchStoryById } from '@/services/firebase/story-service';
+import { isStorySaved, saveStory, unsaveStory } from '@/services/firebase/save-service';
 import {
   createComment,
   deleteComment,
@@ -43,6 +44,11 @@ export default function FullStoryScreen() {
   const [likeChecking, setLikeChecking] = useState<boolean>(true);
   const [likeActionPending, setLikeActionPending] = useState<boolean>(false);
   const [likeError, setLikeError] = useState<string | null>(null);
+
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [saveChecking, setSaveChecking] = useState<boolean>(true);
+  const [saveActionPending, setSaveActionPending] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Comments state
   const [comments, setComments] = useState<StoryComment[]>([]);
@@ -228,6 +234,66 @@ export default function FullStoryScreen() {
     }
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkSaveStatus() {
+      if (!id || !user?.uid) {
+        setSaveChecking(false);
+        setIsSaved(false);
+        return;
+      }
+
+      try {
+        setSaveChecking(true);
+        setSaveError(null);
+        const saved = await isStorySaved(id);
+        if (isMounted) {
+          setIsSaved(saved);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Error checking save status:', err);
+          setSaveError('Could not verify save status.');
+        }
+      } finally {
+        if (isMounted) {
+          setSaveChecking(false);
+        }
+      }
+    }
+
+    checkSaveStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, user?.uid]);
+
+  const handleToggleSave = async () => {
+    if (!id || !user?.uid || saveActionPending || saveChecking) return;
+
+    setSaveActionPending(true);
+    setSaveError(null);
+
+    const currentlySaved = isSaved;
+
+    try {
+      if (currentlySaved) {
+        await unsaveStory(id);
+        setIsSaved(false);
+      } else {
+        await saveStory(id);
+        setIsSaved(true);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle save:', err);
+      setSaveError(err?.message || 'Failed to update save state. Please try again.');
+    } finally {
+      setSaveActionPending(false);
+    }
+  };
+
   const formattedDate = formatDate(story?.createdAt);
 
   return (
@@ -285,30 +351,64 @@ export default function FullStoryScreen() {
               </View>
 
               <View style={styles.likeSection}>
-                <Pressable
-                  style={[
-                    styles.likeButton,
-                    isLiked ? styles.likedButton : styles.unlikedButton,
-                    (likeActionPending || likeChecking || !user) && styles.disabledLikeButton,
-                  ]}
-                  onPress={handleToggleLike}
-                  disabled={likeActionPending || likeChecking || !user}
-                >
-                  {likeChecking || likeActionPending ? (
-                    <ActivityIndicator size="small" color={isLiked ? '#ef4444' : theme.text} />
-                  ) : (
-                    <ThemedText
+                <View style={styles.actionButtonsRow}>
+                  <Pressable
+                    style={[
+                      styles.likeButton,
+                      isLiked ? styles.likedButton : styles.unlikedButton,
+                      (likeActionPending || likeChecking || !user) && styles.disabledLikeButton,
+                    ]}
+                    onPress={handleToggleLike}
+                    disabled={likeActionPending || likeChecking || !user}
+                  >
+                    {likeChecking || likeActionPending ? (
+                      <ActivityIndicator size="small" color={isLiked ? '#ef4444' : theme.text} />
+                    ) : (
+                      <ThemedText
+                        style={[
+                          styles.likeButtonText,
+                          isLiked ? styles.likedButtonText : styles.unlikedButtonText,
+                        ]}
+                      >
+                        {isLiked ? '❤️ Liked' : '🤍 Like'}
+                      </ThemedText>
+                    )}
+                  </Pressable>
+
+                  {user && (
+                    <Pressable
                       style={[
-                        styles.likeButtonText,
-                        isLiked ? styles.likedButtonText : styles.unlikedButtonText,
+                        styles.saveButton,
+                        isSaved ? styles.savedButton : styles.unsavedButton,
+                        (saveActionPending || saveChecking) && styles.disabledSaveButton,
                       ]}
+                      onPress={handleToggleSave}
+                      disabled={saveActionPending || saveChecking}
                     >
-                      {isLiked ? '❤️ Liked' : '🤍 Like'}
-                    </ThemedText>
+                      {saveChecking || saveActionPending ? (
+                        <ActivityIndicator size="small" color={isSaved ? '#3b82f6' : theme.text} />
+                      ) : (
+                        <ThemedText
+                          style={[
+                            styles.saveButtonText,
+                            isSaved ? styles.savedButtonText : styles.unsavedButtonText,
+                          ]}
+                        >
+                          {isSaved ? '🔖 Saved' : '🏷️ Save'}
+                        </ThemedText>
+                      )}
+                    </Pressable>
                   )}
-                </Pressable>
-                {likeError && (
-                  <ThemedText style={styles.likeErrorText}>{likeError}</ThemedText>
+                </View>
+                {(likeError || saveError) && (
+                  <View style={styles.errorContainer}>
+                    {likeError && (
+                      <ThemedText style={styles.likeErrorText}>{likeError}</ThemedText>
+                    )}
+                    {saveError && (
+                      <ThemedText style={styles.saveErrorText}>{saveError}</ThemedText>
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -555,6 +655,11 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     alignItems: 'flex-start',
   },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -586,9 +691,47 @@ const styles = StyleSheet.create({
   },
   unlikedButtonText: {},
   likeErrorText: {
-    marginTop: 6,
+    marginTop: 2,
     fontSize: 13,
     color: '#ef4444',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    minWidth: 110,
+    height: 40,
+  },
+  savedButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderColor: '#3b82f6',
+  },
+  unsavedButton: {
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    borderColor: 'rgba(150, 150, 150, 0.3)',
+  },
+  disabledSaveButton: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  savedButtonText: {
+    color: '#3b82f6',
+  },
+  unsavedButtonText: {},
+  saveErrorText: {
+    marginTop: 2,
+    fontSize: 13,
+    color: '#ef4444',
+  },
+  errorContainer: {
+    marginTop: 6,
   },
   descriptionBox: {
     padding: 14,

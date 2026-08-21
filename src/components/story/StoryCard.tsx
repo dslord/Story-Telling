@@ -11,6 +11,9 @@ export interface StoryCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   deleting?: boolean;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saving?: boolean;
 }
 
 export function StoryCard({
@@ -19,6 +22,9 @@ export function StoryCard({
   onEdit,
   onDelete,
   deleting = false,
+  isSaved = false,
+  onToggleSave,
+  saving = false,
 }: StoryCardProps) {
   const formattedDate = formatDate(story.createdAt);
 
@@ -54,6 +60,29 @@ export function StoryCard({
                 <ThemedText type="small" themeColor="textSecondary">
                   • {formattedDate}
                 </ThemedText>
+              )}
+              {Boolean(onToggleSave) && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onToggleSave?.();
+                  }}
+                  disabled={deleting || saving}
+                >
+                  <ThemedText
+                    type="small"
+                    style={{
+                      opacity: isSaved ? 1.0 : 0.4,
+                      fontSize: 14,
+                    }}
+                  >
+                    🔖
+                  </ThemedText>
+                </Pressable>
               )}
             </View>
           </View>
@@ -161,6 +190,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  saveButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionRow: {
     flexDirection: 'row',

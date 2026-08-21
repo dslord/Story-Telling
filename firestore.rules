@@ -55,6 +55,25 @@ service cloud.firestore {
 
       // Only the user themselves can delete their profile
       allow delete: if request.auth != null && request.auth.uid == userId;
+
+      // 1.1 SAVED STORIES
+      match /savedStories/{storyId} {
+        // Only the owner of the saved stories list can view it
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        // Only the owner can save a story, and the story must exist
+        allow create: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.storyId == storyId
+          && request.resource.data.savedAt == request.time
+          && request.resource.data.keys().hasOnly(['storyId', 'savedAt'])
+          && exists(/databases/$(database)/documents/stories/$(storyId));
+
+        // Only the owner can delete a saved story
+        allow delete: if request.auth != null && request.auth.uid == userId;
+
+        // Saved story documents are read-only / immutable once created
+        allow update: if false;
+      }
     }
 
     // 2. STORIES
