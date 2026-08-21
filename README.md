@@ -166,17 +166,9 @@ npx firebase-tools emulators:exec "npx jest scripts/firestore.rules.test.js --ru
 
 ## Screenshots
 
-### Feed
-[Add screenshot here]
-
-### Story Details
-[Add screenshot here]
-
-### Saved Stories
-[Add screenshot here]
-
-### Profile
-[Add screenshot here]
+| Feed | Story Details | Create Story | User Profile |
+| :---: | :---: | :---: | :---: |
+| ![Feed](docs/screenshots/feed.jpg) | ![Story Details](docs/screenshots/details.jpg) | ![Create Story](docs/screenshots/create.jpg) | ![User Profile](docs/screenshots/profile.jpg) |
 
 ---
 
