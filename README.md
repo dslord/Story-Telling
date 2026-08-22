@@ -180,12 +180,6 @@ npx firebase-tools emulators:exec "npx jest scripts/firestore.rules.test.js --ru
 
 ---
 
-## Release
-
-The project is currently preparing its initial **v1.0.0** public production release.
-
----
-
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
